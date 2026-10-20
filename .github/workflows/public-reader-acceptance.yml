@@ -1,0 +1,46 @@
+name: Public reader backend acceptance
+on:
+  push:
+    branches: [review/acceptance-20261020]
+permissions:
+  contents: read
+jobs:
+  backend:
+    name: Backend ${{ matrix.pr }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pr: PR35
+            sha: d3f762c8df85ad4d6c961151effcd0612c3e5b6a
+          - pr: PR40
+            sha: 0ed254149867582dd381e05a939fc62a544fdb4b
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Frontend dependencies
+        working-directory: web
+        run: npm ci
+      # The required frontend check is reported by the unchanged upstream CI.
+      # Build only the embedding prerequisite here, so its known screenshot
+      # freshness failure cannot prevent independent backend test evidence.
+      - name: Prepare embedded assets for backend compilation
+        working-directory: web
+        run: node scripts/build-lucide.mjs && npx vite build
+      - name: Exact checked source
+        run: git rev-parse HEAD && git status --short
+      - name: All Go tests
+        run: go test ./...
+      - name: Backend release build
+        run: CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /tmp/salt .
